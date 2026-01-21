@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wishing Well Roof CAPTCHA</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Responsive Well CAPTCHA</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -15,20 +15,38 @@
             margin: 0;
             color: #333;
             flex-direction: column;
+            overflow: hidden; /* Prevent body scroll during game */
         }
 
         .captcha-container {
             background: #f0e6d2; 
-            padding: 20px;
+            padding: 15px; /* Reduced padding for mobile */
             border-radius: 12px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.3);
             text-align: center;
-            width: 600px;
+            
+            /* RESPONSIVE WIDTH */
+            width: 95%; 
+            max-width: 600px;
+            
             border: 4px solid #5a4632;
+            box-sizing: border-box; /* Ensures padding doesn't break width */
         }
 
-        h2 { margin-top: 0; color: #5a4632; letter-spacing: 1px; font-variant: small-caps; }
-        p { color: #666; font-size: 0.9rem; margin-bottom: 15px; }
+        h2 { 
+            margin-top: 0; 
+            color: #5a4632; 
+            letter-spacing: 1px; 
+            font-variant: small-caps;
+            font-size: 1.5rem; 
+        }
+        
+        p { 
+            color: #666; 
+            font-size: 0.9rem; 
+            margin-bottom: 10px; 
+            line-height: 1.4;
+        }
 
         canvas {
             border: 4px solid #5a4632;
@@ -37,6 +55,13 @@
             display: block;
             margin: 0 auto;
             box-shadow: inset 0 0 20px rgba(0,0,0,0.1);
+            
+            /* RESPONSIVE SCALING */
+            width: 100%;
+            height: auto;
+            
+            /* PREVENT SCROLLING ON TOUCH */
+            touch-action: none;
         }
 
         .status {
@@ -56,8 +81,8 @@
 <body>
 
     <div class="captcha-container noselect">
-        <h2>Humanity Verificare</h2>
-        <p>Aim for the hole in the roof of the well.</p>
+        <h2>Humanity Verification</h2>
+        <p>Aim for the hole in the roof.</p>
         
         <canvas id="gameCanvas" width="600" height="350"></canvas>
         
@@ -87,7 +112,7 @@
         let isSwinging = false; 
         let isResetting = false; 
         let power = 0;
-        let maxPower = 340; // Needs more power to clear the roof height
+        let maxPower = 340; 
         let isVerified = false;
         
         // Dynamic positions
@@ -99,9 +124,7 @@
         // Well now has roof properties
         let well = { 
             x: 400, w: 60, h: 80, 
-            roofH: 40, // Height of the roof peak
-            roofOverhang: 10, // How far past the walls it goes
-            holeWidth: 20, // The gap at the top
+            roofH: 40, roofOverhang: 10, holeWidth: 20,
             leftGrain: [], rightGrain: []
         }; 
 
@@ -116,7 +139,7 @@
 
         function setupRound() {
             catapultY = Math.floor(Math.random() * 120) + 200;
-            wellY = Math.floor(Math.random() * 100) + 220; // Ensure well isn't too high or roof clips
+            wellY = Math.floor(Math.random() * 100) + 220; 
 
             pivotX = CATAPULT_X_BASE + 40;
             pivotY = catapultY - 20;
@@ -169,19 +192,13 @@
             const minX = 380;
             const maxX = 500;
             well.x = Math.floor(Math.random() * (maxX - minX + 1)) + minX;
-            well.h = 60; // Lower wall height to make room for roof
+            well.h = 60; 
             
-            // Roof Geometry
-            well.roofH = Math.floor(Math.random() * 15) + 35; // 35-50px tall
+            well.roofH = Math.floor(Math.random() * 15) + 35; 
             well.roofOverhang = 15;
             
-            // Hole Calculation
-            const innerSlack = Math.random() * 6 + 6; // Needs a bit more slack for roof shots
+            const innerSlack = Math.random() * 6 + 6; 
             well.holeWidth = (stone.radius * 2) + innerSlack;
-            
-            // Wall width is hole width + some thickness for the roof slope visual
-            // But realistically, the well shaft is usually uniform.
-            // Let's make the well shaft slightly wider than the hole
             well.w = well.holeWidth + 20; 
 
             well.leftGrain = generateGrainPattern(15);
@@ -197,12 +214,31 @@
         }
 
         // --- Input ---
-        const startCharge = () => { if (stone.isFlying || isVerified || isResetting || isSwinging) return; isCharging = true; statusEl.innerText = "Cranking..."; statusEl.className = "status"; };
-        const releaseCharge = () => { if (!isCharging || isVerified || isResetting || isSwinging) return; isCharging = false; startSwing(); };
+        const startCharge = () => { 
+            if (stone.isFlying || isVerified || isResetting || isSwinging) return; 
+            isCharging = true; 
+            statusEl.innerText = "Cranking..."; 
+            statusEl.className = "status"; 
+        };
+        const releaseCharge = () => { 
+            if (!isCharging || isVerified || isResetting || isSwinging) return; 
+            isCharging = false; 
+            startSwing(); 
+        };
+        
         canvas.addEventListener('mousedown', startCharge);
         canvas.addEventListener('mouseup', releaseCharge);
-        canvas.addEventListener('touchstart', (e) => { e.preventDefault(); startCharge(); });
-        canvas.addEventListener('touchend', (e) => { e.preventDefault(); releaseCharge(); });
+        
+        // Touch events - Prevent Default to stop scrolling
+        canvas.addEventListener('touchstart', (e) => { 
+            e.preventDefault(); 
+            startCharge(); 
+        }, {passive: false});
+        
+        canvas.addEventListener('touchend', (e) => { 
+            e.preventDefault(); 
+            releaseCharge(); 
+        }, {passive: false});
 
         function startSwing() { isSwinging = true; statusEl.innerText = "Firing!"; }
 
@@ -212,7 +248,6 @@
             currentArmAngle = ANGLE_STOP; 
             updateStonePositionToArm();
 
-            // Higher arc needed for roof
             const launchAngle = -70 * (Math.PI / 180); 
             const torsionForce = power * 0.45; 
             const velocityMagnitude = torsionForce / stone.mass;
@@ -259,8 +294,6 @@
                 const overlap = stone.radius - dist;
                 stone.x += nx * overlap; stone.y += ny * overlap;
                 const dot = stone.vx * nx + stone.vy * ny;
-                
-                // Roofs are bouncy to reject stones
                 const roofDamping = 0.7; 
                 stone.vx = (stone.vx - 2 * dot * nx) * roofDamping;
                 stone.vy = (stone.vy - 2 * dot * ny) * roofDamping;
@@ -294,45 +327,36 @@
                 stone.x += stone.vx; stone.y += stone.vy; stone.angle += stone.angVel;
 
                 const wellTop = wellY - well.h;
-                const supportH = 20; // Height of supports above wall
+                const supportH = 20; 
                 const roofBottomY = wellTop - supportH;
                 const roofPeakY = roofBottomY - well.roofH;
                 const center = well.x + well.w / 2;
                 
-                // 1. Walls
                 checkRectCollision(well.x - 15, wellTop, 15, well.h);
                 checkRectCollision(well.x + well.w, wellTop, 15, well.h);
 
-                // 2. ROOF COLLISION
-                // Left Roof Panel: From (Left Overhang) -> (Center - Hole/2)
-                // Bottom-Left of roof: well.x - overhang
                 const roofLeftX = well.x - well.roofOverhang;
                 const holeLeftX = center - well.holeWidth / 2;
                 checkLineCollision(roofLeftX, roofBottomY, holeLeftX, roofPeakY);
 
-                // Right Roof Panel: From (Right Overhang) -> (Center + Hole/2)
                 const roofRightX = well.x + well.w + well.roofOverhang;
                 const holeRightX = center + well.holeWidth / 2;
                 checkLineCollision(roofRightX, roofBottomY, holeRightX, roofPeakY);
 
-                // 3. Terrain Checks
                 if (stone.x < well.x && stone.y + stone.radius > catapultY + 10) {
                      stone.y = catapultY + 10 - stone.radius;
                      fail("HIT TERRAIN"); return;
                 }
                 
-                // 4. Ground Fail (must be inside well shaft)
                 if (stone.y + stone.radius >= wellY) {
-                    // It must be between walls
                     if (stone.x < well.x + 5 || stone.x > well.x + well.w - 5) {
                         stone.y = wellY - stone.radius;
                         fail("REJECTED"); return;
                     }
                 }
                 
-                // 5. Stuck/Win
                 if (Math.abs(stone.vx) < 0.1 && Math.abs(stone.vy) < 0.1) {
-                    if (stone.y < roofPeakY) { stone.vx += (Math.random() > 0.5 ? 2 : -2); stone.vy -= 2; } // Stuck on roof? Slide off
+                    if (stone.y < roofPeakY) { stone.vx += (Math.random() > 0.5 ? 2 : -2); stone.vy -= 2; } 
                     if (stone.y < wellY - stone.radius - 20) { fail("JAMMED"); return; }
                 }
                 
@@ -405,12 +429,11 @@
             drawWoodRect(well.x - 15, wellTop, 15, well.h, woodBase, woodGrain, well.leftGrain);
             drawWoodRect(well.x + well.w, wellTop, 15, well.h, woodBase, woodGrain, well.rightGrain);
             
-            // Supports
             const supportH = 20;
             const roofBottomY = wellTop - supportH;
             ctx.fillStyle = '#4a3627'; // Dark wood
-            ctx.fillRect(well.x, wellTop - supportH, 8, supportH); // Left support
-            ctx.fillRect(well.x + well.w - 8, wellTop - supportH, 8, supportH); // Right support
+            ctx.fillRect(well.x, wellTop - supportH, 8, supportH); 
+            ctx.fillRect(well.x + well.w - 8, wellTop - supportH, 8, supportH); 
 
             // ROOF
             const roofPeakY = roofBottomY - well.roofH;
@@ -422,24 +445,21 @@
 
             ctx.fillStyle = '#6b4423'; ctx.strokeStyle = '#3e2723'; ctx.lineWidth = 2;
             
-            // Left Roof Panel
             ctx.beginPath();
-            ctx.moveTo(roofLeftX, roofBottomY + 10); // Eave
-            ctx.lineTo(holeLeftX, roofPeakY); // Peak
-            ctx.lineTo(holeLeftX - 5, roofPeakY + 10); // Thickness inner
-            ctx.lineTo(roofLeftX, roofBottomY + 20); // Thickness outer
+            ctx.moveTo(roofLeftX, roofBottomY + 10); 
+            ctx.lineTo(holeLeftX, roofPeakY); 
+            ctx.lineTo(holeLeftX - 5, roofPeakY + 10); 
+            ctx.lineTo(roofLeftX, roofBottomY + 20); 
             ctx.closePath();
             ctx.fill(); ctx.stroke();
 
-            // Right Roof Panel
             ctx.beginPath();
-            ctx.moveTo(roofRightX, roofBottomY + 10); // Eave
-            ctx.lineTo(holeRightX, roofPeakY); // Peak
-            ctx.lineTo(holeRightX + 5, roofPeakY + 10); // Thickness inner
-            ctx.lineTo(roofRightX, roofBottomY + 20); // Thickness outer
+            ctx.moveTo(roofRightX, roofBottomY + 10); 
+            ctx.lineTo(holeRightX, roofPeakY); 
+            ctx.lineTo(holeRightX + 5, roofPeakY + 10); 
+            ctx.lineTo(roofRightX, roofBottomY + 20); 
             ctx.closePath();
             ctx.fill(); ctx.stroke();
-
 
             // --- DRAW CATAPULT ---
             ctx.lineWidth = 6; ctx.strokeStyle = '#5a4632'; ctx.fillStyle = '#5a4632';
