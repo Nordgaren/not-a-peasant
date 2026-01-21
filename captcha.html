@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unfair Physics CAPTCHA</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1a1a1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            color: #eee;
+            flex-direction: column;
+        }
+
+        .captcha-container {
+            background: #2d2d2d;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            text-align: center;
+            width: 600px;
+            border: 1px solid #444;
+        }
+
+        h2 { margin-top: 0; color: #e74c3c; letter-spacing: 1px; }
+        p { color: #aaa; font-size: 0.9rem; margin-bottom: 15px; }
+
+        canvas {
+            background: #5D6D7E; /* Darker, stormy sky */
+            border: 4px solid #1a1a1a;
+            border-radius: 4px;
+            cursor: pointer;
+            display: block;
+            margin: 0 auto;
+            box-shadow: inset 0 0 30px rgba(0,0,0,0.3);
+        }
+
+        .status {
+            margin-top: 15px;
+            font-weight: bold;
+            height: 24px;
+            letter-spacing: 1px;
+            transition: color 0.2s;
+            font-family: monospace;
+            font-size: 1.1rem;
+        }
+        .status.success { color: #2ecc71; }
+        .status.fail { color: #e74c3c; }
+        .status.stuck { color: #f1c40f; }
+
+        .noselect { user-select: none; -webkit-user-select: none; }
+    </style>
+</head>
+<body>
+
+    <div class="captcha-container noselect">
+        <h2>Verificare</h2>
+        
+        <canvas id="gameCanvas" width="600" height="350"></canvas>
+        
+        <div id="statusMessage" class="status">Waiting...</div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const statusEl = document.getElementById('statusMessage');
+
+        // --- Configuration ---
+        const GRAVITY = 0.5;
+        const FRICTION = 0.98; 
+        const BOUNCE_DAMPING = 0.4; // Slightly bouncier to make it harder to settle
+        const GROUND_Y = 300;
+        
+        // Catapult Settings
+        const PIVOT_X = 100;
+        const PIVOT_Y = GROUND_Y - 20; 
+        const ARM_LENGTH = 80;
+        const STOP_BAR_X = PIVOT_X + 20; 
+
+        const ANGLE_STOP = -1.4; 
+        const ANGLE_GROUND = -3.0;
+
+        // --- Game State ---
+        let isCharging = false;
+        let isResetting = false; 
+        let power = 0;
+        let maxPower = 300; 
+        let isVerified = false;
+        
+        let well = { x: 400, w: 60, h: 80, lipSize: 10 }; 
+
+        let stone = {
+            x: 0, y: 0, 
+            vx: 0, vy: 0,
+            radius: 10, 
+            mass: 1,    
+            angle: 0,
+            angVel: 0,
+            isFlying: false,
+            points: [] 
+        };
+
+        function init() {
+            setupRound();
+            loop();
+        }
+
+        function setupRound() {
+            // Randomize size
+            stone.radius = Math.floor(Math.random() * 14) + 10;
+            // Mass Calculation
+            stone.mass = (stone.radius * stone.radius) / 100; 
+            
+            stone.isFlying = false;
+            stone.vx = 0; stone.vy = 0;
+            
+            generateJaggedStone();
+            randomizeWell();
+        }
+
+        function generateJaggedStone() {
+            stone.points = [];
+            const sides = 5 + Math.floor(Math.random() * 4); // Fewer sides = more angular
+            const bulgeAngle = Math.random() * Math.PI * 2;
+
+            let currentAngle = 0;
+            for (let i = 0; i < sides; i++) {
+                const slice = (Math.PI * 2) / sides;
+                currentAngle += slice * (0.8 + Math.random() * 0.4); // Irregular spacing
+                if (i === sides - 1) currentAngle = Math.PI * 2; 
+
+                // Base radius
+                let r = stone.radius * (0.8 + Math.random() * 0.3);
+                
+                // Add spikes
+                if (Math.random() > 0.6) r *= 1.25;
+
+                // Add lopsided bulge
+                const angleDiff = Math.abs(currentAngle - bulgeAngle);
+                if (angleDiff < 1.0) r *= 1.3; 
+
+                stone.points.push({
+                    x: Math.cos(currentAngle) * r,
+                    y: Math.sin(currentAngle) * r
+                });
+            }
+        }
+
+        function randomizeWell() {
+            const minX = 350;
+            const maxX = 530;
+            well.x = Math.floor(Math.random() * (maxX - minX + 1)) + minX;
+            well.h = 75;
+            
+            // UNFAIR: Large lips that catch stones
+            well.lipSize = Math.floor(Math.random() * 8) + 14; 
+            
+            // UNFAIR: Tight clearance
+            // Sometimes only 1px slack
+            const innerSlack = Math.random() * 4 + 1; 
+            const targetInner = (stone.radius * 2) + innerSlack;
+            
+            well.w = targetInner + (well.lipSize * 2);
+        }
+
+        function resetGame() {
+            isResetting = false;
+            power = 0;
+            isCharging = false;
+            setupRound();
+        }
+
+        // --- Input ---
+        const startCharge = () => {
+            if (stone.isFlying || isVerified || isResetting) return;
+            isCharging = true;
+            statusEl.innerText = "Tensioning...";
+            statusEl.className = "status";
+        };
+        const releaseCharge = () => {
+            if (!isCharging || isVerified || isResetting) return;
+            isCharging = false;
+            fire();
+        };
+
+        canvas.addEventListener('mousedown', startCharge);
+        canvas.addEventListener('mouseup', releaseCharge);
+        canvas.addEventListener('touchstart', (e) => { e.preventDefault(); startCharge(); });
+        canvas.addEventListener('touchend', (e) => { e.preventDefault(); releaseCharge(); });
+
+        function fire() {
+            stone.isFlying = true;
+            
+            stone.x = PIVOT_X + Math.cos(ANGLE_STOP) * ARM_LENGTH;
+            stone.y = PIVOT_Y + Math.sin(ANGLE_STOP) * ARM_LENGTH;
+
+            // UNFAIR: Higher arc requires more precision
+            const launchAngle = -65 * (Math.PI / 180); 
+
+            const torsionForce = power * 0.42; 
+            
+            const velocityMagnitude = torsionForce / stone.mass;
+
+            // UNFAIR: More random wobble on launch
+            const wobble = (Math.random() - 0.5) * 0.2; 
+            
+            stone.vx = velocityMagnitude * Math.cos(launchAngle + wobble);
+            stone.vy = velocityMagnitude * Math.sin(launchAngle + wobble); 
+            
+            // UNFAIR: High spin creates chaos on bounce
+            stone.angVel = ((Math.random() * 0.8) - 0.4) / stone.mass;
+            statusEl.innerText = "Loose!";
+        }
+
+        // --- Physics Engine ---
+        function checkCollision(rectX, rectY, rectW, rectH) {
+            let closestX = Math.max(rectX, Math.min(stone.x, rectX + rectW));
+            let closestY = Math.max(rectY, Math.min(stone.y, rectY + rectH));
+
+            let dx = stone.x - closestX;
+            let dy = stone.y - closestY;
+            let distance = Math.sqrt(dx * dx + dy * dy);
+
+            // Using bounding circle for collision, but visual is jagged
+            // This mismatch creates the "Unfair" feeling where a spike visually catches
+            if (distance < stone.radius) {
+                let nx = dx / distance;
+                let ny = dy / distance;
+                if (distance === 0) { nx = 0; ny = -1; }
+
+                let depth = stone.radius - distance;
+                stone.x += nx * depth;
+                stone.y += ny * depth;
+
+                let dot = stone.vx * nx + stone.vy * ny;
+                
+                // UNFAIR: High chaotic deflection
+                // If you hit a rim, you fly off unpredictably
+                let randomDeflection = (Math.random() - 0.5) * 1.5; 
+                let massDamping = BOUNCE_DAMPING / Math.sqrt(stone.mass);
+
+                stone.vx = (stone.vx - 2 * dot * nx) * massDamping + randomDeflection;
+                stone.vy = (stone.vy - 2 * dot * ny) * massDamping;
+
+                stone.vx *= 0.9; 
+                stone.angVel += (stone.vx * 0.1); 
+
+                return true;
+            }
+            return false;
+        }
+
+        function update() {
+            if (isVerified || isResetting) return;
+
+            if (isCharging) {
+                power += 2.5;
+                if (power > maxPower) power = maxPower; 
+            }
+
+            if (!stone.isFlying) {
+                const pct = power/maxPower;
+                const currentArmAngle = ANGLE_STOP + (pct * (ANGLE_GROUND - ANGLE_STOP));
+                
+                stone.angle = currentArmAngle;
+                stone.x = PIVOT_X + Math.cos(currentArmAngle) * ARM_LENGTH;
+                stone.y = PIVOT_Y + Math.sin(currentArmAngle) * ARM_LENGTH;
+            }
+
+            if (stone.isFlying) {
+                stone.vy += GRAVITY;
+                stone.vx *= FRICTION;
+                stone.x += stone.vx;
+                stone.y += stone.vy;
+                stone.angle += stone.angVel;
+
+                const wellTop = GROUND_Y - well.h;
+                
+                // Walls
+                checkCollision(well.x - 15, wellTop, 15, well.h);
+                checkCollision(well.x + well.w, wellTop, 15, well.h);
+                
+                // Lips
+                checkCollision(well.x, wellTop, well.lipSize, 15);
+                checkCollision(well.x + well.w - well.lipSize, wellTop, well.lipSize, 15);
+
+                // Ground Fail
+                if (stone.y + stone.radius >= GROUND_Y) {
+                    // Check strict bounds (inner walls)
+                    if (stone.x < well.x + 15 || stone.x > well.x + well.w - 15) {
+                        stone.y = GROUND_Y - stone.radius;
+                        fail("REJECTED");
+                        return;
+                    }
+                }
+
+                // Stuck Check
+                if (Math.abs(stone.vx) < 0.1 && Math.abs(stone.vy) < 0.1) {
+                    if (stone.y < wellTop + 20) { fail("STUCK ON RIM"); return; }
+                    if (stone.y < GROUND_Y - stone.radius - 20) { fail("JAMMED"); return; }
+                }
+
+                // Win
+                if (stone.y + stone.radius >= GROUND_Y) {
+                     stone.y = GROUND_Y - stone.radius;
+                     stone.vy = -stone.vy * 0.1; 
+                     stone.vx *= 0.5; 
+                     if (Math.abs(stone.vx) < 0.1 && Math.abs(stone.vy) < 0.5) verifySuccess();
+                }
+
+                if (stone.x > canvas.width || stone.y > canvas.height + 50) fail("MISSED");
+            }
+        }
+
+        function fail(msg) {
+            if(isResetting) return;
+            isResetting = true;
+            stone.isFlying = false; 
+            statusEl.innerText = msg;
+            statusEl.className = msg.includes("STUCK") || msg.includes("JAMMED") ? "status stuck" : "status fail";
+            setTimeout(() => { resetGame(); statusEl.innerText = "Again."; statusEl.className = "status"; }, 1000);
+        }
+
+        function verifySuccess() {
+            isVerified = true;
+            statusEl.innerText = "HUMAN VERIFIED";
+            statusEl.className = "status success";
+            stone.isFlying = false;
+        }
+
+        // --- Rendering ---
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Sky
+            ctx.fillStyle = "#2c3e50";
+            ctx.fillRect(0,0, canvas.width, canvas.height);
+            
+            // Ground
+            ctx.fillStyle = '#273746'; 
+            ctx.fillRect(0, GROUND_Y, canvas.width, 50);
+
+            // --- DRAW WELL ---
+            const wellTop = GROUND_Y - well.h;
+            ctx.fillStyle = '#95a5a6'; // Light concrete
+            ctx.fillRect(well.x - 15, wellTop, 15, well.h);
+            ctx.fillRect(well.x + well.w, wellTop, 15, well.h);
+            
+            // Lips
+            ctx.fillStyle = '#bdc3c7'; // Lighter lip highlight
+            ctx.beginPath();
+            ctx.rect(well.x, wellTop, well.lipSize, 15);
+            ctx.rect(well.x + well.w - well.lipSize, wellTop, well.lipSize, 15);
+            ctx.fill();
+
+            // Interior
+            ctx.fillStyle = '#17202a';
+            ctx.fillRect(well.x, wellTop + 15, well.w, well.h - 15);
+            
+            // --- DRAW CATAPULT ---
+            // Chassis
+            ctx.lineWidth = 6;
+            ctx.strokeStyle = '#5a4632'; 
+            ctx.fillStyle = '#5a4632';
+            ctx.fillRect(PIVOT_X - 40, GROUND_Y - 10, 80, 10);
+            ctx.fillRect(STOP_BAR_X, GROUND_Y - 90, 8, 90);
+            ctx.beginPath();
+            ctx.moveTo(STOP_BAR_X, GROUND_Y - 70);
+            ctx.lineTo(PIVOT_X - 20, GROUND_Y - 10);
+            ctx.stroke();
+
+            // Arm
+            ctx.save();
+            ctx.translate(PIVOT_X, PIVOT_Y);
+            
+            let armAngle;
+            if (stone.isFlying) {
+                armAngle = ANGLE_STOP;
+            } else {
+                const pct = power/maxPower;
+                armAngle = ANGLE_STOP + (pct * (ANGLE_GROUND - ANGLE_STOP));
+            }
+            ctx.rotate(armAngle);
+
+            ctx.fillStyle = '#8e7150';
+            ctx.fillRect(0, -6, ARM_LENGTH, 12);
+            ctx.fillStyle = '#3e2723';
+            ctx.beginPath();
+            ctx.arc(ARM_LENGTH, 0, 14, 0, Math.PI*2);
+            ctx.fill();
+
+            if (!stone.isFlying) {
+                ctx.save();
+                ctx.translate(ARM_LENGTH, 0); 
+                renderStoneShape(0, 0);
+                ctx.restore();
+            }
+            ctx.restore(); 
+
+            // Tension Rope
+            if (isCharging) {
+                ctx.strokeStyle = '#eee'; 
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                const tipX = PIVOT_X + Math.cos(armAngle) * ARM_LENGTH;
+                const tipY = PIVOT_Y + Math.sin(armAngle) * ARM_LENGTH;
+                ctx.moveTo(tipX, tipY);
+                ctx.lineTo(PIVOT_X - 50, GROUND_Y);
+                ctx.stroke();
+            }
+
+            // Wheels
+            ctx.fillStyle = '#111';
+            ctx.beginPath(); ctx.arc(PIVOT_X, PIVOT_Y, 6, 0, Math.PI*2); ctx.fill(); 
+            ctx.beginPath(); ctx.arc(PIVOT_X - 30, GROUND_Y, 12, 0, Math.PI*2); ctx.fill(); 
+            ctx.beginPath(); ctx.arc(PIVOT_X + 30, GROUND_Y, 12, 0, Math.PI*2); ctx.fill(); 
+
+            // Flying Stone
+            if (stone.isFlying) {
+                ctx.save();
+                ctx.translate(stone.x, stone.y);
+                ctx.rotate(stone.angle);
+                renderStoneShape(0, 0);
+                ctx.restore();
+            }
+        }
+
+        function renderStoneShape(lx, ly) {
+            let lightness = 70 - (stone.mass * 8); 
+            ctx.fillStyle = `hsl(0, 0%, ${lightness}%)`;
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 2;
+            
+            ctx.beginPath();
+            if (stone.points.length > 0) {
+                ctx.moveTo(lx + stone.points[0].x, ly + stone.points[0].y);
+                for (let i = 1; i < stone.points.length; i++) {
+                    ctx.lineTo(lx + stone.points[i].x, ly + stone.points[i].y);
+                }
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+        }
+
+        function loop() {
+            update();
+            draw();
+            requestAnimationFrame(loop);
+        }
+
+        init();
+    </script>
+</body>
+</html>
