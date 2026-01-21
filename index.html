@@ -3,74 +3,84 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Responsive Well CAPTCHA</title>
+    <title>Wishing Well CAPTCHA</title>
     <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #87CEEB; 
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            color: #333;
-            flex-direction: column;
-            overflow: hidden; /* Prevent body scroll during game */
+        /* RESET & BASE */
+        * {
+            box-sizing: border-box; /* Ensures padding doesn't increase width */
         }
 
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow-x: hidden; /* Kill horizontal scroll */
+            background-color: #87CEEB; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* CONTAINER */
         .captcha-container {
             background: #f0e6d2; 
-            padding: 15px; /* Reduced padding for mobile */
+            
+            /* Responsive Width Logic */
+            width: 95%;          /* Take up most of the mobile screen */
+            max-width: 600px;    /* Stop growing on desktop */
+            
+            padding: 10px;       /* Smaller padding for mobile */
             border-radius: 12px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.3);
             text-align: center;
-            
-            /* RESPONSIVE WIDTH */
-            width: 95%; 
-            max-width: 600px;
-            
             border: 4px solid #5a4632;
-            box-sizing: border-box; /* Ensures padding doesn't break width */
+            
+            /* Center vertically on mobile if needed */
+            margin: auto; 
         }
 
         h2 { 
-            margin-top: 0; 
+            margin-top: 5px; 
             color: #5a4632; 
             letter-spacing: 1px; 
             font-variant: small-caps;
-            font-size: 1.5rem; 
+            font-size: 1.3rem; /* Slightly smaller text for mobile */
         }
         
         p { 
             color: #666; 
-            font-size: 0.9rem; 
+            font-size: 0.85rem; 
             margin-bottom: 10px; 
-            line-height: 1.4;
+            line-height: 1.3;
         }
 
+        /* CANVAS SCALING */
         canvas {
-            border: 4px solid #5a4632;
+            border: 3px solid #5a4632;
             border-radius: 4px;
             cursor: pointer;
             display: block;
             margin: 0 auto;
-            box-shadow: inset 0 0 20px rgba(0,0,0,0.1);
             
-            /* RESPONSIVE SCALING */
+            /* This forces the 600px internal canvas to shrink to the container width */
             width: 100%;
-            height: auto;
+            height: auto; 
             
-            /* PREVENT SCROLLING ON TOUCH */
-            touch-action: none;
+            /* Disables browser handling of touch gestures (zooming/scrolling) on the game */
+            touch-action: none; 
+            -webkit-tap-highlight-color: transparent;
         }
 
         .status {
-            margin-top: 15px;
+            margin-top: 10px;
             font-weight: bold;
             height: 24px;
             letter-spacing: 1px;
             font-family: monospace;
-            font-size: 1.1rem;
+            font-size: 1rem;
         }
         .status.success { color: #27ae60; }
         .status.fail { color: #c0392b; }
@@ -115,13 +125,11 @@
         let maxPower = 340; 
         let isVerified = false;
         
-        // Dynamic positions
         let catapultY = 300;
         let wellY = 300;
         let pivotX, pivotY, stopBarX;
         let currentArmAngle = ANGLE_STOP; 
 
-        // Well now has roof properties
         let well = { 
             x: 400, w: 60, h: 80, 
             roofH: 40, roofOverhang: 10, holeWidth: 20,
@@ -193,7 +201,6 @@
             const maxX = 500;
             well.x = Math.floor(Math.random() * (maxX - minX + 1)) + minX;
             well.h = 60; 
-            
             well.roofH = Math.floor(Math.random() * 15) + 35; 
             well.roofOverhang = 15;
             
@@ -229,14 +236,15 @@
         canvas.addEventListener('mousedown', startCharge);
         canvas.addEventListener('mouseup', releaseCharge);
         
-        // Touch events - Prevent Default to stop scrolling
+        // Touch events
         canvas.addEventListener('touchstart', (e) => { 
-            e.preventDefault(); 
+            // Prevent scrolling
+            if(e.target == canvas) e.preventDefault();
             startCharge(); 
         }, {passive: false});
         
         canvas.addEventListener('touchend', (e) => { 
-            e.preventDefault(); 
+            if(e.target == canvas) e.preventDefault();
             releaseCharge(); 
         }, {passive: false});
 
@@ -419,7 +427,6 @@
 
             const wellTop = wellY - well.h;
             
-            // --- DRAW WOODEN WELL ---
             const woodBase = '#a07048'; const woodGrain = '#704a2e';
             
             ctx.fillStyle = '#2a1e14'; ctx.fillRect(well.x, wellTop, well.w, well.h);
@@ -431,11 +438,10 @@
             
             const supportH = 20;
             const roofBottomY = wellTop - supportH;
-            ctx.fillStyle = '#4a3627'; // Dark wood
+            ctx.fillStyle = '#4a3627'; 
             ctx.fillRect(well.x, wellTop - supportH, 8, supportH); 
             ctx.fillRect(well.x + well.w - 8, wellTop - supportH, 8, supportH); 
 
-            // ROOF
             const roofPeakY = roofBottomY - well.roofH;
             const roofLeftX = well.x - well.roofOverhang;
             const roofRightX = well.x + well.w + well.roofOverhang;
@@ -461,7 +467,6 @@
             ctx.closePath();
             ctx.fill(); ctx.stroke();
 
-            // --- DRAW CATAPULT ---
             ctx.lineWidth = 6; ctx.strokeStyle = '#5a4632'; ctx.fillStyle = '#5a4632';
             ctx.fillRect(CATAPULT_X_BASE, catapultY - 10, 80, 10); 
             ctx.fillRect(stopBarX, catapultY - 90, 8, 90); 
